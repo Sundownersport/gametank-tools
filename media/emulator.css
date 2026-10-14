@@ -1,0 +1,35 @@
+#bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+#status {
+    margin-left: 6px;
+    opacity: 0.8;
+}
+
+#wrap {
+    max-width: 640px;
+}
+
+#canvas {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1;
+    image-rendering: pixelated;
+    background: #000;
+    outline: none;
+    border: 2px solid transparent;
+}
+
+#canvas:focus {
+    border-color: var(--vscode-focusBorder);
+}
+
+#keys {
+    margin-top: 6px;
+    opacity: 0.75;
+}

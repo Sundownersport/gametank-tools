@@ -1,0 +1,85 @@
+#top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+#modes {
+    display: flex;
+    gap: 4px;
+}
+
+#file {
+    opacity: 0.7;
+}
+
+#screen-wrap {
+    max-width: 640px;
+}
+
+#screen {
+    display: block;
+    width: 100%;
+    image-rendering: pixelated;
+    outline: none;
+    border: 2px solid transparent;
+}
+
+#screen:focus {
+    border-color: var(--vscode-focusBorder);
+}
+
+#hint {
+    margin: 6px 0;
+    opacity: 0.8;
+}
+
+#tools {
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 6px 0;
+}
+
+#tools button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+}
+
+#tools canvas {
+    width: 16px;
+    height: 16px;
+}
+
+#problems div {
+    margin: 2px 0;
+}
+
+#thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+#thumbs figure {
+    margin: 0;
+    cursor: pointer;
+    text-align: center;
+}
+
+#thumbs canvas {
+    width: 128px;
+    display: block;
+    border: 2px solid transparent;
+}
+
+#thumbs figure.on canvas {
+    border-color: var(--vscode-focusBorder);
+}
+
+#missing code {
+    font-family: var(--vscode-editor-font-family);
+}

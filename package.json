@@ -1,0 +1,90 @@
+{
+  "name": "gametank-tools",
+  "displayName": "GameTank Tools",
+  "description": "Emulator panel, live game previews, palette colours, sprite viewer and build tasks for GameTank development",
+  "version": "0.1.0",
+  "publisher": "sundownersport",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sundownersport/gametank-tools.git"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["gametank", "6502", "cc65", "emulator", "retro"],
+  "main": "./extension.js",
+  "activationEvents": [
+    "workspaceContains:**/project.json",
+    "onLanguage:c"
+  ],
+  "contributes": {
+    "commands": [
+      { "command": "gametank.runRom", "title": "Run ROM in Emulator", "category": "GameTank", "icon": "$(vm)" },
+      { "command": "gametank.buildAndRun", "title": "Build and Run", "category": "GameTank", "icon": "$(play)" },
+      { "command": "gametank.openPreview", "title": "Open Live Preview", "category": "GameTank", "icon": "$(preview)" },
+      { "command": "gametank.showPalette", "title": "Show Palette", "category": "GameTank", "icon": "$(symbol-color)" },
+      { "command": "gametank.viewSprite", "title": "Open in Sprite Viewer", "category": "GameTank" }
+    ],
+    "menus": {
+      "editor/title": [
+        { "command": "gametank.buildAndRun", "when": "resourceLangId == c && gametank.hasProject", "group": "navigation@1" },
+        { "command": "gametank.openPreview", "when": "resourceLangId == c && gametank.hasPreview", "group": "navigation@2" }
+      ],
+      "explorer/context": [
+        { "command": "gametank.runRom", "when": "resourceExtname == .gtr", "group": "navigation" },
+        { "command": "gametank.viewSprite", "when": "resourceExtname == .bmp", "group": "navigation" }
+      ],
+      "commandPalette": [
+        { "command": "gametank.viewSprite", "when": "false" }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "gametank.sprite",
+        "displayName": "GameTank Sprite Viewer",
+        "selector": [{ "filenamePattern": "*.bmp" }],
+        "priority": "option"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "gametank",
+        "required": ["task"],
+        "properties": {
+          "task": {
+            "type": "string",
+            "enum": ["build", "clean", "prereqs"],
+            "description": "build runs make import && make; prereqs builds cc65 and zopfli"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "gametank",
+        "owner": "gametank",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*?)(?::|\\()(\\d+)\\)?: (Error|Warning): (.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    ],
+    "configuration": {
+      "title": "GameTank",
+      "properties": {
+        "gametank.colors.format": {
+          "type": "string",
+          "enum": ["decimal", "hex"],
+          "default": "decimal",
+          "description": "Number format used when inserting colours from the palette."
+        }
+      }
+    }
+  }
+}

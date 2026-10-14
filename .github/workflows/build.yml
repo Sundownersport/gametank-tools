@@ -1,0 +1,62 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GTE_COMMIT: 9896544460d5bb7dd89c2d2bc0f5c97a6f31d2e0
+  EMSDK_VERSION: 3.1.74
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache emulator
+        id: cache-emu
+        uses: actions/cache@v4
+        with:
+          path: media/emulator
+          key: gte-${{ env.GTE_COMMIT }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('scripts/build-emulator.sh') }}
+
+      - uses: mymindstorm/setup-emsdk@v14
+        if: steps.cache-emu.outputs.cache-hit != 'true'
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+
+      - name: Build emulator
+        if: steps.cache-emu.outputs.cache-hit != 'true'
+        run: sh scripts/build-emulator.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check scripts
+        run: for f in extension.js src/*.js media/*.js; do node --check "$f"; done
+
+      - name: Package extension
+        run: npx --yes @vscode/vsce@3 package --no-dependencies -o gametank-tools.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emulator
+          path: media/emulator
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gametank-tools-vsix
+          path: gametank-tools.vsix
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: gametank-tools.vsix

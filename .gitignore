@@ -1,0 +1,3 @@
+media/emulator/
+node_modules/
+*.vsix

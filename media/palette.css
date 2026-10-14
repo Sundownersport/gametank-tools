@@ -1,0 +1,30 @@
+#bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.hue {
+    margin: 8px 0 3px;
+    opacity: 0.8;
+}
+
+.row {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 3px;
+}
+
+.swatch {
+    width: 28px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 2px;
+}
+
+.swatch:hover {
+    outline: 2px solid var(--vscode-focusBorder);
+}
