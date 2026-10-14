@@ -15,6 +15,7 @@ function activate(context) {
     require('./src/preview').register(context);
     require('./src/colors').register(context);
     require('./src/sprites').register(context);
+    require('./src/intellisense').register(context).catch(e => console.error('GameTank Tools: IntelliSense provider', e));
 
     updateContext();
     const watcher = vscode.workspace.createFileSystemWatcher('**/{project.json,.gametank/preview.js}');

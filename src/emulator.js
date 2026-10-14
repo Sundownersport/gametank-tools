@@ -5,6 +5,7 @@ const { pickProject, projectFor, romPath, webviewHtml } = require('./project');
 const { runBuild } = require('./tasks');
 
 const panels = new Map();
+const runningTasks = new Set();
 
 function emulatorAvailable(extensionUri) {
     return fs.existsSync(path.join(extensionUri.fsPath, 'media', 'emulator', 'index.wasm'));
@@ -61,6 +62,10 @@ class EmulatorPanel {
 
     scheduleSend() {
         clearTimeout(this.timer);
+        if (runningTasks.size) {
+            this.pendingReload = true;
+            return;
+        }
         let lastSize = -1;
         const check = () => {
             let size = -1;
@@ -70,6 +75,16 @@ class EmulatorPanel {
             this.timer = setTimeout(check, 250);
         };
         this.timer = setTimeout(check, 250);
+    }
+
+    buildEnded(code) {
+        const pending = this.pendingReload;
+        this.pendingReload = false;
+        if (code === 0) {
+            if (pending) this.scheduleSend();
+        } else if (code !== undefined) {
+            this.post({ type: 'status', text: 'Build failed, so the last good ROM is still running. See the terminal and Problems panel.' });
+        }
     }
 
     send() {
@@ -130,16 +145,17 @@ async function buildAndRun(context) {
     }
     await vscode.workspace.saveAll(false);
     const p = show(context, romPath(project));
-    const code = await runBuild(project);
-    if (code !== 0) {
-        if (p) p.post({ type: 'status', text: 'Build failed. See the terminal and Problems panel.' });
-        return;
-    }
-    if (p) p.scheduleSend();
+    if (p) p.pendingReload = true;
+    await runBuild(project);
 }
 
 function register(context) {
     context.subscriptions.push(
+        vscode.tasks.onDidStartTaskProcess(e => { if (!e.execution.task.isBackground) runningTasks.add(e.execution); }),
+        vscode.tasks.onDidEndTaskProcess(e => {
+            runningTasks.delete(e.execution);
+            if (!runningTasks.size) panels.forEach(p => p.buildEnded(e.exitCode));
+        }),
         vscode.commands.registerCommand('gametank.runRom', uri => runRom(context, uri)),
         vscode.commands.registerCommand('gametank.buildAndRun', () => buildAndRun(context)),
     );
