@@ -3,12 +3,13 @@
 VS Code extension for [GameTank](https://gametank.zone) development with the [gametank_sdk](https://github.com/clydeshaffer/gametank_sdk).
 
 - **Emulator panel**: runs your ROM inside VS Code and reloads it every time it is rebuilt.
-- **Build tasks**: `make import && make` as the default build task, with compiler errors linked to your source.
+- **Build tasks**: build with make as the default build task, with compiler errors linked to your source.
 - **Live preview**: an optional per-game script that redraws on every keystroke, with a tile editor for level data.
 - **Palette colours**: swatches next to colour values in C, a colour picker that snaps to the GameTank palette, and a palette panel.
+- **IntelliSense**: include paths and cc65 settings for Microsoft's C/C++ extension, so SDK headers resolve.
 - **Sprite viewer**: shows `.bmp` assets in real GameTank colours and warns when a file's palette differs.
 
-A project is any folder with `project.json` and `makefile`, as created from gametank_sdk. Projects at the workspace root or one folder down are found automatically.
+A project is any folder whose makefile builds a `.gtr` ROM: current gametank_sdk projects, older SDK projects without `project.json`, and make-based assembly projects. Projects at the workspace root or one folder down are found automatically. Any `.gtr` file can be run in the emulator from the explorer, project or not.
 
 ## Install
 
@@ -32,15 +33,25 @@ The emulator is [GameTankEmulator](https://github.com/clydeshaffer/GameTankEmula
 
 ## Build tasks
 
-The extension provides `gametank` tasks for each project: `build`, `clean` and `prereqs`. Run them with **Terminal > Run Build Task** (Ctrl+Shift+B) or **Tasks: Run Task**. Errors from cc65 and ca65 appear in the Problems panel.
+The extension provides `gametank` tasks for each project: `build`, plus `clean` and `prereqs` when the makefile has them. `build` runs `make import` then `make` when the makefile has an `import` target, and plain `make` otherwise. Run them with **Terminal > Run Build Task** (Ctrl+Shift+B) or **Tasks: Run Task**. Errors from cc65, ca65 and ld65 appear in the Problems panel.
+
+The ROM location comes from `romname` in `project.json`, or else the `.gtr` target in the makefile.
+
+make is run directly rather than through a shell, so the tasks behave the same in any terminal. `make`, cc65 and Node.js must be on `PATH`. On Windows that usually means MSYS2, or opening the project in WSL with the WSL extension.
+
+## IntelliSense
+
+With Microsoft's C/C++ extension installed, GameTank Tools supplies its configuration for project files: the `-I` folders from the makefile's `CFLAGS`, cc65's headers from `tools/cc65`, unsigned `char`, and empty definitions for cc65 keywords such as `__fastcall__`. Allow it when the C/C++ extension asks.
 
 ## Palette colours
 
 In C files, colour values get a swatch:
 
-- `#define` constants whose name looks like a colour (`C_SKY`, `COLOR_BG`, `PLAYER_COLOUR`), when the value is a number.
+- `#define` constants named like a colour (`C_SKY`, `COLOR_BG`, `PLAYER_COLOUR`), when the value is a number.
 - Calls to any 3-argument `#define` macro that shifts its first argument left by 5, such as `#define COL(h, s, l) (((h) << 5) | ((s) << 3) | (l))`.
 - Literal colours in `queue_draw_box`, `queue_clear_screen` and `queue_clear_border`.
+
+Colour constants are recognised by a `C_`, `COL_` or `COLOR_` prefix or a `_COLOR` / `_COL` suffix.
 
 Clicking a swatch opens VS Code's colour picker. Whatever you pick is snapped to the nearest GameTank colour and written back in the same form: decimal, hex or macro.
 

@@ -2,8 +2,32 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 
+function makefile(dir) {
+    for (const name of ['makefile', 'Makefile', 'GNUmakefile']) {
+        const p = path.join(dir, name);
+        if (fs.existsSync(p)) {
+            try { return fs.readFileSync(p, 'utf8'); } catch (e) { return ''; }
+        }
+    }
+    return null;
+}
+
 function isProject(dir) {
-    return fs.existsSync(path.join(dir, 'project.json')) && fs.existsSync(path.join(dir, 'makefile'));
+    const mk = makefile(dir);
+    return mk !== null && (fs.existsSync(path.join(dir, 'project.json')) || /\.gtr\b|gametank/i.test(mk));
+}
+
+function hasTarget(project, target) {
+    return new RegExp(`^${target}\\s*:`, 'm').test(makefile(project) || '');
+}
+
+function includeDirs(project) {
+    const mk = makefile(project) || '';
+    const dirs = new Set(['src']);
+    for (const line of mk.split(/\r?\n/).filter(l => /^\s*CFLAGS\s*[+:]?=/.test(l))) {
+        for (const m of line.matchAll(/-I\s*([^\s$()]+)/g)) dirs.add(m[1]);
+    }
+    return [...dirs].map(d => path.join(project, d));
 }
 
 function findProjects() {
@@ -48,9 +72,13 @@ function romPath(project) {
         const name = JSON.parse(fs.readFileSync(path.join(project, 'project.json'), 'utf8')).romname;
         if (name) return path.join(project, 'bin', name);
     } catch (e) {}
-    const bin = path.join(project, 'bin');
-    const roms = fs.existsSync(bin) ? fs.readdirSync(bin).filter(f => f.endsWith('.gtr')) : [];
-    return roms.length ? path.join(bin, roms[0]) : path.join(bin, 'game.gtr');
+    const target = (makefile(project) || '').match(/^([^\s:#=$()]+\.gtr)\s*:/m);
+    if (target) return path.join(project, target[1]);
+    for (const dir of [path.join(project, 'bin'), project]) {
+        const roms = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.gtr')) : [];
+        if (roms.length) return path.join(dir, roms[0]);
+    }
+    return path.join(project, 'bin', 'game.gtr');
 }
 
 function fontBytes(project) {
@@ -87,4 +115,4 @@ ${scripts.map(s => `<script nonce="${n}" src="${typeof s === 'string' ? media(s)
 </html>`;
 }
 
-module.exports = { findProjects, projectFor, pickProject, romPath, fontBytes, webviewHtml };
+module.exports = { findProjects, projectFor, pickProject, romPath, fontBytes, webviewHtml, hasTarget, includeDirs };

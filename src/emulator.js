@@ -2,10 +2,10 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const { pickProject, projectFor, romPath, webviewHtml } = require('./project');
-const { runBuild } = require('./tasks');
+const { runBuild, onBuildStart, onBuildEnd } = require('./tasks');
 
 const panels = new Map();
-const runningTasks = new Set();
+let running = 0;
 
 function emulatorAvailable(extensionUri) {
     return fs.existsSync(path.join(extensionUri.fsPath, 'media', 'emulator', 'index.wasm'));
@@ -60,17 +60,24 @@ class EmulatorPanel {
         this.panel.webview.postMessage(msg);
     }
 
-    scheduleSend() {
+    romStat() {
+        try { return fs.statSync(this.rom); } catch (e) { return null; }
+    }
+
+    scheduleSend(force = false) {
         clearTimeout(this.timer);
-        if (runningTasks.size) {
+        if (running) {
             this.pendingReload = true;
             return;
         }
         let lastSize = -1;
         const check = () => {
-            let size = -1;
-            try { size = fs.statSync(this.rom).size; } catch (e) {}
-            if (size > 0 && size === lastSize) return this.send();
+            const st = this.romStat();
+            const size = st ? st.size : -1;
+            if (size > 0 && size === lastSize) {
+                if (force || st.mtimeMs !== this.knownMtime) this.send();
+                return;
+            }
             lastSize = size;
             this.timer = setTimeout(check, 250);
         };
@@ -81,8 +88,10 @@ class EmulatorPanel {
         const pending = this.pendingReload;
         this.pendingReload = false;
         if (code === 0) {
-            if (pending) this.scheduleSend();
+            if (pending) this.scheduleSend(true);
         } else if (code !== undefined) {
+            const st = this.romStat();
+            if (st) this.knownMtime = st.mtimeMs;
             this.post({ type: 'status', text: 'Build failed, so the last good ROM is still running. See the terminal and Problems panel.' });
         }
     }
@@ -92,6 +101,8 @@ class EmulatorPanel {
             this.post({ type: 'status', text: `${path.basename(this.rom)} not built yet. Waiting for it…` });
             return;
         }
+        const st = this.romStat();
+        if (st) this.knownMtime = st.mtimeMs;
         const bytes = fs.readFileSync(this.rom);
         this.post({ type: 'rom', name: path.basename(this.rom), bytes: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.length) });
     }
@@ -149,13 +160,17 @@ async function buildAndRun(context) {
     await runBuild(project);
 }
 
+function buildFinished(code) {
+    running = Math.max(0, running - 1);
+    if (!running) panels.forEach(p => p.buildEnded(code));
+}
+
 function register(context) {
     context.subscriptions.push(
-        vscode.tasks.onDidStartTaskProcess(e => { if (!e.execution.task.isBackground) runningTasks.add(e.execution); }),
-        vscode.tasks.onDidEndTaskProcess(e => {
-            runningTasks.delete(e.execution);
-            if (!runningTasks.size) panels.forEach(p => p.buildEnded(e.exitCode));
-        }),
+        vscode.tasks.onDidStartTaskProcess(e => { if (!e.execution.task.isBackground) running++; }),
+        vscode.tasks.onDidEndTaskProcess(e => { if (!e.execution.task.isBackground) buildFinished(e.exitCode); }),
+        onBuildStart(() => running++),
+        onBuildEnd(e => buildFinished(e.code)),
         vscode.commands.registerCommand('gametank.runRom', uri => runRom(context, uri)),
         vscode.commands.registerCommand('gametank.buildAndRun', () => buildAndRun(context)),
     );

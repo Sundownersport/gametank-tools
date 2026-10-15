@@ -1,7 +1,7 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
-const { findProjects, projectFor } = require('./project');
+const { findProjects, projectFor, includeDirs } = require('./project');
 
 const CPPTOOLS = 'ms-vscode.cpptools';
 const API_VERSION = 6;
@@ -20,11 +20,7 @@ const DEFINES = [
 ];
 
 function includePath(project) {
-    return [
-        path.join(project, 'src'),
-        path.join(project, 'src', 'gt'),
-        path.join(project, 'tools', 'cc65', 'include'),
-    ].filter(p => fs.existsSync(p));
+    return [...includeDirs(project), path.join(project, 'tools', 'cc65', 'include')].filter(p => fs.existsSync(p));
 }
 
 function configFor(project) {

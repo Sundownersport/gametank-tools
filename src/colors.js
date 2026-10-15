@@ -3,7 +3,7 @@ const PALETTE = require('../media/palette.js');
 const { webviewHtml } = require('./project');
 
 const NUM = '(0[xX][0-9a-fA-F]+|\\d+)';
-const COLOR_NAME = /(^|_)(C|COL|CLR|COLOR|COLOUR)(_|$)|COLOU?R/i;
+const COLOR_NAME = /^(C|COL|CLR|COLOU?R)_\w|_(COL|CLR|COLOU?R)$/i;
 const COLOR_CALLS = { queue_draw_box: 4, queue_clear_screen: 0, queue_clear_border: 0 };
 
 function toColor(index) {
