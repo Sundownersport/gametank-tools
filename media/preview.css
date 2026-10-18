@@ -83,3 +83,32 @@
 #missing code {
     font-family: var(--vscode-editor-font-family);
 }
+
+#tools .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--vscode-widget-border, #888);
+}
+
+#picker {
+    flex-basis: 100%;
+    display: grid;
+    grid-template-columns: repeat(32, 14px);
+    gap: 1px;
+    padding: 4px 0;
+}
+
+#picker .swatch {
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+#picker .swatch.used {
+    outline: 2px solid var(--vscode-focusBorder);
+    outline-offset: -2px;
+}

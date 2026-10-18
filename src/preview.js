@@ -100,7 +100,8 @@ class PreviewPanel {
             const we = new vscode.WorkspaceEdit();
             for (const e of msg.edits) {
                 const start = new vscode.Position(e.line, e.col);
-                we.replace(this.sourceUri, new vscode.Range(start, start.translate(0, 1)), e.ch);
+                if ('insert' in e) we.insert(this.sourceUri, start, e.insert);
+                else we.replace(this.sourceUri, new vscode.Range(start, start.translate(0, 1)), e.ch);
             }
             await vscode.workspace.applyEdit(we);
         } else if (msg.type === 'reveal' && this.sourceUri) {

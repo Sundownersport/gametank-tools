@@ -125,7 +125,47 @@ function parseDefines(lines) {
         return v;
     };
     Object.keys(raw).forEach(n => evaluate(n));
-    return values;
+    return { values, evalExpr: expr => evalC(expand(expr, new Set())) };
+}
+
+function parseArray(lines, name) {
+    const decl = new RegExp('\\b' + name + '\\s*\\[');
+    let i = lines.findIndex(l => decl.test(l));
+    if (i < 0) return null;
+    const items = [];
+    let open = false, depth = 0, cur = null;
+    const flush = () => {
+        if (cur && cur.text.trim()) items.push({ text: cur.text.trim(), line: cur.line, col: cur.col, end: cur.end });
+        cur = null;
+    };
+    for (; i < lines.length; ++i) {
+        const line = lines[i];
+        for (let c = 0; c < line.length; ++c) {
+            const ch = line[c];
+            if (ch === '/' && line[c + 1] === '/') break;
+            if (!open) {
+                if (ch === '{') open = true;
+                else if (ch === ';') return null;
+                continue;
+            }
+            if (ch === '(') depth++;
+            else if (ch === ')') depth--;
+            else if (ch === ',' && depth === 0) { flush(); continue; }
+            else if (ch === '}' && depth === 0) {
+                const trailingComma = !cur && items.length > 0;
+                flush();
+                return { items, close: { line: i, col: c }, last: items[items.length - 1], trailingComma };
+            }
+            if (!cur) {
+                if (/\s/.test(ch)) continue;
+                cur = { text: '', line: i, col: c };
+            }
+            cur.text += ch;
+            if (!/\s/.test(ch)) cur.end = { line: i, col: c + 1 };
+        }
+        if (cur) cur.text += ' ';
+    }
+    return null;
 }
 
 function parseTable(lines, name) {
@@ -235,6 +275,14 @@ function makeGt(shared) {
             if (!t) gt.problem(`No array named ${name} in ${shared.source.file}`);
             return t || [];
         },
+        array(name) {
+            const a = parseArray(shared.source.lines, name);
+            if (!a) {
+                gt.problem(`No array named ${name} in ${shared.source.file}`);
+                return [];
+            }
+            return a.items.map(it => ({ ...it, value: shared.evalExpr(it.text) }));
+        },
         problem(msg) { shared.problems.push(String(msg)); },
     };
     return gt;
@@ -244,6 +292,7 @@ function makeGt(shared) {
 
 const shared = {
     defines: {},
+    evalExpr: () => undefined,
     source: { text: '', lines: [], file: '' },
     input: { held: {}, pressed: {} },
     frame: 0,
@@ -257,6 +306,8 @@ let levels = [];
 let started = false;
 let crashed = null;
 let brush = null;
+let brushColor = null;
+let picker = false;
 let hover = null;
 let painting = null;
 let keysDown = {};
@@ -311,7 +362,9 @@ function loadSource(text, file) {
     const lines = text.split(/\r?\n/);
     const before = rowsOf(level);
     shared.source = { text, lines, file };
-    shared.defines = parseDefines(lines);
+    const defs = parseDefines(lines);
+    shared.defines = defs.values;
+    shared.evalExpr = defs.evalExpr;
     shared.problems = [];
     crashed = null;
     const missing = (game.requires || []).filter(n => shared.defines[n] === undefined);
@@ -397,20 +450,94 @@ function cellFromEvent(e) {
     return { r, c };
 }
 
-function paint(cell, ch) {
+function applyEdits(src, edits) {
+    const lines = src.slice();
+    const sorted = [...edits].sort((a, b) => b.line - a.line || b.col - a.col);
+    for (const e of sorted) {
+        const l = lines[e.line];
+        lines[e.line] = 'insert' in e ? l.slice(0, e.col) + e.insert + l.slice(e.col) : l.slice(0, e.col) + e.ch + l.slice(e.col + 1);
+    }
+    return lines;
+}
+
+function paint(cell, ch, extra = []) {
     const lv = levels[level];
     const row = lv && lv.rows[cell.r];
-    if (!row || cell.c >= row.text.length || row.text[cell.c] === ch) return;
-    const edits = [{ line: row.line, col: row.col + cell.c, ch }];
+    if (!row || cell.c >= row.text.length || (row.text[cell.c] === ch && !extra.length)) return;
+    const edits = [...extra, { line: row.line, col: row.col + cell.c, ch }];
     if ((editor().unique || []).includes(ch)) {
         lv.rows.forEach(rw => [...rw.text].forEach((t, c) => {
             if (t === ch) edits.push({ line: rw.line, col: rw.col + c, ch: editor().empty || '.' });
         }));
     }
-    const lines = shared.source.lines.slice();
-    for (const e of edits) lines[e.line] = lines[e.line].slice(0, e.col) + e.ch + lines[e.line].slice(e.col + 1);
-    loadSource(lines.join('\n'), shared.source.file);
+    loadSource(applyEdits(shared.source.lines, edits).join('\n'), shared.source.file);
     vscode.postMessage({ type: 'edit', edits });
+}
+
+// ---- colour tiles ----
+
+function hex(c) {
+    return '#' + rgb(c).map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function colorSlots() {
+    const spec = editor().colors;
+    const arr = spec && parseArray(shared.source.lines, spec.table);
+    if (!arr) return null;
+    return { spec, arr, chars: val(spec.chars) || '', values: arr.items.map(it => shared.evalExpr(it.text)) };
+}
+
+function hslMacro() {
+    for (const line of shared.source.lines) {
+        const m = line.match(/^\s*#\s*define\s+(\w+)\(\s*\w+\s*,\s*\w+\s*,\s*\w+\s*\)/);
+        if (m && shared.evalExpr(`${m[1]}(1, 0, 0)`) === 32 && shared.evalExpr(`${m[1]}(0, 1, 0)`) === 8
+            && shared.evalExpr(`${m[1]}(0, 0, 1)`) === 1) return m[1];
+    }
+    return null;
+}
+
+function appendItem(arr, text) {
+    const lines = shared.source.lines;
+    const { close, last } = arr;
+    const edits = [];
+    if (last && !arr.trailingComma) edits.push({ line: last.end.line, col: last.end.col, insert: ',' });
+    if (!lines[close.line].slice(0, close.col).trim()) {
+        const indent = last ? lines[last.line].match(/^\s*/)[0] : '    ';
+        edits.push({ line: close.line, col: 0, insert: `${indent}${text},\n` });
+    } else {
+        const spaced = /\s/.test(lines[close.line][close.col - 1] || '');
+        edits.push({ line: close.line, col: close.col, insert: `${spaced ? '' : ' '}${text} ` });
+    }
+    return edits;
+}
+
+function colorSlot(c) {
+    const s = colorSlots();
+    if (!s) return null;
+    const i = s.values.indexOf(c);
+    if (i >= 0 && i < s.chars.length) return { ch: s.chars[i], edits: [] };
+    if (s.values.length >= s.chars.length) {
+        gt.problem(`${s.spec.table} is full: every character in its list is used`);
+        showProblems();
+        return null;
+    }
+    const macro = hslMacro();
+    const text = macro ? `${macro}(${c >> 5}, ${(c >> 3) & 3}, ${c & 7})` : String(c);
+    return { ch: s.chars[s.values.length], edits: appendItem(s.arr, text) };
+}
+
+function pickColor(c) {
+    picker = false;
+    const s = colorSlots();
+    const i = s ? s.values.indexOf(c) : -1;
+    if (i >= 0 && i < s.chars.length) {
+        setBrush(s.chars[i]);
+    } else {
+        brush = null;
+        brushColor = c;
+    }
+    buildTools();
+    screenEl.focus();
 }
 
 screenEl.addEventListener('mousedown', e => {
@@ -418,8 +545,19 @@ screenEl.addEventListener('mousedown', e => {
     if (mode !== 'edit' || !editor()) return;
     const cell = cellFromEvent(e);
     if (!cell) return;
-    painting = e.button === 2 ? (editor().empty || '.') : brush;
-    if (painting) paint(cell, painting);
+    if (e.button === 2) {
+        painting = editor().empty || '.';
+        paint(cell, painting);
+    } else if (brushColor !== null) {
+        const slot = colorSlot(brushColor);
+        if (!slot) return;
+        brush = painting = slot.ch;
+        brushColor = null;
+        paint(cell, painting, slot.edits);
+    } else {
+        painting = brush;
+        if (painting) paint(cell, painting);
+    }
 });
 screenEl.addEventListener('mousemove', e => {
     if (mode !== 'edit') return;
@@ -447,6 +585,7 @@ document.getElementById('mode-edit').onclick = () => setMode('edit');
 
 function setBrush(ch) {
     brush = ch;
+    brushColor = null;
     document.querySelectorAll('#tools button').forEach(b => b.classList.toggle('on', b.dataset.tile === ch));
 }
 
@@ -463,32 +602,71 @@ function toCanvas(pixels, w, h) {
     return cv;
 }
 
+function tileButton(ed, t, label, title) {
+    const b = document.createElement('button');
+    b.dataset.tile = t.ch;
+    b.title = title;
+    if (ed.drawTile) {
+        const scratch = makeGt(shared);
+        const g = grid() || { w: 8, h: 8 };
+        guard('drawTile', () => ed.drawTile(scratch, t.ch, 0, 0));
+        if (!crashed) {
+            const px = new Uint8Array(g.w * g.h);
+            for (let j = 0; j < g.h; ++j) px.set(scratch.screen.subarray(j * W, j * W + g.w), j * g.w);
+            b.append(toCanvas(px, g.w, g.h));
+        }
+    }
+    b.append(label);
+    b.onclick = () => { setBrush(t.ch); screenEl.focus(); };
+    return b;
+}
+
+function buildColorTools(tools, ed) {
+    const s = colorSlots();
+    if (!s) return;
+    const known = new Set(ed.tiles.map(t => t.ch));
+    s.arr.items.forEach((it, i) => {
+        const ch = s.chars[i];
+        if (ch && !known.has(ch)) tools.appendChild(tileButton(ed, { ch }, ch, `${s.spec.name} '${ch}': ${it.text}`));
+    });
+    const add = document.createElement('button');
+    add.className = brushColor !== null ? 'on' : '';
+    add.title = `Pick a colour. A new one is added to ${s.spec.table} when you paint with it.`;
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    if (brushColor !== null) sw.style.background = hex(brushColor);
+    add.append(sw, `+ ${s.spec.name}`);
+    add.onclick = () => { picker = !picker; buildTools(); };
+    tools.appendChild(add);
+    if (!picker) return;
+    const pop = document.createElement('div');
+    pop.id = 'picker';
+    for (let c = 0; c < 256; ++c) {
+        const b = document.createElement('button');
+        b.className = 'swatch';
+        b.style.background = hex(c);
+        b.title = `${c >> 5}, ${(c >> 3) & 3}, ${c & 7}` + (s.values.includes(c) ? ` ('${s.chars[s.values.indexOf(c)]}')` : '');
+        if (s.values.includes(c)) b.classList.add('used');
+        b.onclick = () => pickColor(c);
+        pop.appendChild(b);
+    }
+    tools.appendChild(pop);
+}
+
 function buildTools() {
     const tools = document.getElementById('tools');
     tools.innerHTML = '';
     const ed = editor();
     document.getElementById('mode-edit').style.display = ed ? '' : 'none';
     if (!ed) return;
-    if (!brush || !ed.tiles.some(t => t.ch === brush)) brush = (ed.tiles[1] || ed.tiles[0]).ch;
+    const s = ed.colors ? colorSlots() : null;
+    const valid = ch => ed.tiles.some(t => t.ch === ch) || (s && s.chars.slice(0, s.values.length).includes(ch));
+    if (brushColor === null && (!brush || !valid(brush))) brush = (ed.tiles[1] || ed.tiles[0]).ch;
     ed.tiles.forEach((t, n) => {
-        const b = document.createElement('button');
-        b.dataset.tile = t.ch;
-        b.title = `${t.name} '${t.ch}'` + (n < 9 ? ` (key ${n + 1})` : '');
-        if (ed.drawTile) {
-            const scratch = makeGt(shared);
-            const g = grid() || { w: 8, h: 8 };
-            guard('drawTile', () => ed.drawTile(scratch, t.ch, 0, 0));
-            if (!crashed) {
-                const px = new Uint8Array(g.w * g.h);
-                for (let j = 0; j < g.h; ++j) px.set(scratch.screen.subarray(j * W, j * W + g.w), j * g.w);
-                b.append(toCanvas(px, g.w, g.h));
-            }
-        }
-        b.append(`${n < 9 ? n + 1 + ' ' : ''}${t.name}`);
-        b.onclick = () => { setBrush(t.ch); screenEl.focus(); };
-        tools.appendChild(b);
+        tools.appendChild(tileButton(ed, t, `${n < 9 ? n + 1 + ' ' : ''}${t.name}`, `${t.name} '${t.ch}'` + (n < 9 ? ` (key ${n + 1})` : '')));
     });
-    setBrush(brush);
+    if (ed.colors) buildColorTools(tools, ed);
+    document.querySelectorAll('#tools button[data-tile]').forEach(b => b.classList.toggle('on', brushColor === null && b.dataset.tile === brush));
 }
 
 function buildThumbs() {

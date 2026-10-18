@@ -90,6 +90,7 @@ The `gt` object:
 | --- | --- |
 | `gt.defines` | every `#define` in the source that evaluates to a number, including function-like macros |
 | `gt.table(name)` | string tables such as `levels[][H][W+1]`: `[{ first, last, rows: [{ line, col, text }] }]` |
+| `gt.array(name)` | a flat array such as `colors[] = { C_SKY, COL(1, 2, 3) }`: `[{ text, value, line, col }]`, with each value evaluated |
 | `gt.source` | `{ text, lines, file }` |
 | `gt.input` | `{ held, pressed }`, each with `up down left right a b c start` |
 | `gt.screen` | 128×128 `Uint8Array` of GameTank colour indexes |
@@ -110,8 +111,11 @@ editor: {
     unique: ['S'],               // placing one removes the others in the level
     tiles: [{ ch: '#', name: 'Wall' }, { ch: 'S', name: 'Start' }],
     drawTile(gt, ch) { },        // optional: draw an icon at 0,0 for the toolbar
+    colors: { name: 'Stone', table: 'stone_colors', chars: '#ABD' },  // optional, see below
 },
 ```
+
+`colors` adds colour variants of one tile. `table` is a colour array in the source and `chars` (a string, or gt => string) gives the tile character for each entry in order. The toolbar shows a button for each colour in the table and a **+** button with a palette. Painting with a colour that isn't in the table yet appends it, as `COL(h, s, l)` when the source defines such a macro, and uses the next character. Draw these tiles yourself from `gt.array(table)`.
 
 Moving the editor cursor into a level in the source switches the preview to it, and clicking a thumbnail jumps to the level in the source.
 
