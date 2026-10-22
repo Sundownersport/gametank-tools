@@ -29,6 +29,8 @@ The panel watches the ROM file and reloads it whenever it changes, whether the b
 
 Gamepads work too. Click the screen first so it has keyboard focus.
 
+The Paddle menu turns on paddle input for games that call `update_paddle_inputs()`. **Mouse** sets the knob from the cursor position across the screen. **USB** reads the first axis of a USB paddle (or any gamepad), and its first button is A. The live preview has the same menu.
+
 The emulator is [GameTankEmulator](https://github.com/clydeshaffer/GameTankEmulator) by Clyde Shaffer (MIT), built to WebAssembly.
 
 ## Build tasks
@@ -92,7 +94,7 @@ The `gt` object:
 | `gt.table(name)` | string tables such as `levels[][H][W+1]`: `[{ first, last, rows: [{ line, col, text }] }]` |
 | `gt.array(name)` | a flat array such as `colors[] = { C_SKY, COL(1, 2, 3) }`: `[{ text, value, line, col }]`, with each value evaluated |
 | `gt.source` | `{ text, lines, file }` |
-| `gt.input` | `{ held, pressed }`, each with `up down left right a b c start` |
+| `gt.input` | `{ held, pressed, paddle }`: `held` and `pressed` each have `up down left right a b c start`; `paddle` is the paddle rotation 0–255, or `null` when the paddle is off |
 | `gt.screen` | 128×128 `Uint8Array` of GameTank colour indexes |
 | `gt.clear(c)`, `gt.box(x, y, w, h, c)`, `gt.pixel(x, y, c)` | drawing |
 | `gt.blit(pixels, width, x, y, sx?, sy?, w?, h?, transparent?)` | copy from your own pixel buffer, skipping colour 0 |

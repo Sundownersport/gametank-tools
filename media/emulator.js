@@ -2,12 +2,14 @@ const vscode = acquireVsCodeApi();
 const canvas = document.getElementById('canvas');
 const statusEl = document.getElementById('status');
 const pauseBtn = document.getElementById('pause');
+const paddleSel = document.getElementById('paddle');
 const base = document.getElementById('emu').dataset.base;
 
 let ready = false;
 let pending = null;
 let hidden = false;
 let userPaused = false;
+let paddleMode = (vscode.getState() || {}).paddle || 'off';
 
 function status(text) {
     statusEl.textContent = text;
@@ -32,6 +34,27 @@ function applyPause() {
     if (ready) Module.ccall(hidden || userPaused ? 'PauseEmulation' : 'ResumeEmulation', null, [], []);
 }
 
+function applyPaddle() {
+    paddleSel.value = paddleMode;
+    vscode.setState({ paddle: paddleMode });
+    if (!ready) return;
+    Module.ccall('SetPaddleTouchMode', null, ['number'], [1]);
+    Module.ccall('SetPaddleMode', null, ['number'], [paddleMode === 'mouse' ? 1 : 0]);
+    if (paddleMode === 'off') Module.ccall('SetPaddleValue', null, ['number'], [255]);
+}
+
+function findPaddle() {
+    const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(p => p && p.axes.length);
+    return pads.find(p => /paddle/i.test(p.id)) || pads[0];
+}
+
+function pollPaddle() {
+    requestAnimationFrame(pollPaddle);
+    if (!ready || paddleMode !== 'usb') return;
+    const pad = findPaddle();
+    if (pad) Module.ccall('SetPaddleValue', null, ['number'], [Math.round((pad.axes[0] + 1) * 127.5)]);
+}
+
 var Module = {
     canvas,
     locateFile: f => base + '/' + f,
@@ -48,6 +71,8 @@ var Module = {
     postRun: [() => {
         ready = true;
         status('Emulator ready');
+        applyPaddle();
+        pollPaddle();
         if (pending) loadRom(pending.name, pending.bytes);
         pending = null;
         vscode.postMessage({ type: 'ready' });
@@ -59,6 +84,8 @@ var Module = {
 
 document.getElementById('reset').onclick = () => { vscode.postMessage({ type: 'reset' }); canvas.focus(); };
 pauseBtn.onclick = () => { userPaused = !userPaused; applyPause(); canvas.focus(); };
+paddleSel.onchange = () => { paddleMode = paddleSel.value; applyPaddle(); canvas.focus(); };
+applyPaddle();
 document.getElementById('shot').onclick = () => {
     const out = document.createElement('canvas');
     out.width = canvas.width;

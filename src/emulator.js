@@ -31,10 +31,15 @@ class EmulatorPanel {
   <button id="reset" title="Reload the ROM and reset">Reset</button>
   <button id="pause">Pause</button>
   <button id="shot" title="Save a screenshot">Screenshot</button>
+  <select id="paddle" title="Paddle controller">
+    <option value="off">Paddle: off</option>
+    <option value="mouse">Paddle: mouse</option>
+    <option value="usb">Paddle: USB</option>
+  </select>
   <span id="status">Loading emulator…</span>
 </div>
 <div id="wrap"><canvas id="canvas" tabindex="0" width="512" height="512"></canvas></div>
-<div id="keys">Arrows: d-pad · Z/X/C: A/B/C · Enter: Start · Gamepads work too. Click the screen first.</div>
+<div id="keys">Arrows: d-pad · Z/X/C: A/B/C · Enter: Start · Gamepads work too. Paddle: mouse uses the cursor position, USB uses the first gamepad axis. Click the screen first.</div>
 <div id="emu" data-base="${this.panel.webview.asWebviewUri(emu)}"></div>`,
         });
 

@@ -294,7 +294,7 @@ const shared = {
     defines: {},
     evalExpr: () => undefined,
     source: { text: '', lines: [], file: '' },
-    input: { held: {}, pressed: {} },
+    input: { held: {}, pressed: {}, paddle: null },
     frame: 0,
     problems: [],
 };
@@ -312,6 +312,8 @@ let hover = null;
 let painting = null;
 let keysDown = {};
 let prevHeld = {};
+let paddleMode = (vscode.getState() || {}).paddle || 'off';
+let mousePaddle = 128;
 
 const screenEl = document.getElementById('screen');
 const ctx = screenEl.getContext('2d');
@@ -393,11 +395,19 @@ function setLevel(n) {
 
 // ---- input ----
 
+function findPaddle(pads) {
+    return pads.find(p => /paddle/i.test(p.id)) || pads[0];
+}
+
 function readInput() {
     const held = { ...keysDown };
-    for (const pad of navigator.getGamepads ? navigator.getGamepads() : []) {
-        if (!pad) continue;
+    const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(p => p && p.axes.length);
+    const usbPaddle = paddleMode === 'usb' ? findPaddle(pads) : null;
+    let paddle = paddleMode === 'mouse' ? mousePaddle : null;
+    if (usbPaddle) paddle = Math.round((usbPaddle.axes[0] + 1) * 127.5);
+    for (const pad of pads) {
         pad.buttons.forEach((b, i) => { if (b.pressed && PAD_BUTTONS[i]) held[PAD_BUTTONS[i]] = true; });
+        if (pad === usbPaddle) continue;
         if (pad.axes[0] < -0.5) held.left = true;
         if (pad.axes[0] > 0.5) held.right = true;
         if (pad.axes[1] < -0.5) held.up = true;
@@ -406,8 +416,20 @@ function readInput() {
     const pressed = {};
     for (const b of BUTTONS) pressed[b] = !!held[b] && !prevHeld[b];
     prevHeld = held;
-    shared.input = { held, pressed };
+    shared.input = { held, pressed, paddle };
 }
+
+const paddleSel = document.getElementById('paddle');
+paddleSel.value = paddleMode;
+paddleSel.onchange = () => {
+    paddleMode = paddleSel.value;
+    vscode.setState({ ...(vscode.getState() || {}), paddle: paddleMode });
+    screenEl.focus();
+};
+screenEl.addEventListener('mousemove', e => {
+    const r = screenEl.getBoundingClientRect();
+    mousePaddle = Math.max(0, Math.min(255, Math.floor((e.clientX - r.left) / r.width * 256)));
+});
 
 screenEl.addEventListener('keydown', e => {
     if (KEYMAP[e.key]) { keysDown[KEYMAP[e.key]] = true; e.preventDefault(); return; }
@@ -574,7 +596,7 @@ function setMode(m) {
     document.getElementById('mode-edit').classList.toggle('on', m === 'edit');
     document.getElementById('tools').style.display = m === 'edit' ? 'flex' : 'none';
     document.getElementById('hint').textContent = m === 'play'
-        ? 'Click the screen, then: arrows d-pad, Z/X/C A/B/C, Enter Start. Gamepads work too.'
+        ? 'Click the screen, then: arrows d-pad, Z/X/C A/B/C, Enter Start. Gamepads work too. Paddle: mouse uses the cursor position over the screen, USB uses the first gamepad axis.'
         : 'Left click/drag paints, right click erases, keys 1–9 pick a tile. Changes are written to the source.';
     hover = null;
     if (m === 'play' && game) setLevel(level);

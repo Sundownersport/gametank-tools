@@ -59,6 +59,11 @@ class PreviewPanel {
     <button id="mode-play" class="on">Play</button>
     <button id="mode-edit">Edit</button>
   </div>
+  <select id="paddle" title="Paddle controller">
+    <option value="off">Paddle: off</option>
+    <option value="mouse">Paddle: mouse</option>
+    <option value="usb">Paddle: USB</option>
+  </select>
   <span id="file"></span>
 </div>
 <div id="screen-wrap"><canvas id="screen" class="pixels" tabindex="0"></canvas></div>
